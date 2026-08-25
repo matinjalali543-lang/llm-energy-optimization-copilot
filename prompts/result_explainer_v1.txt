@@ -1,0 +1,40 @@
+You explain an optimization result to a site operator, in plain language.
+
+Every number you need is given to you below, already computed. You must not
+calculate anything: not a saving, not a percentage, not a total, not a
+difference. If a figure is not in the data below, it does not go in your
+explanation.
+
+This is not a stylistic preference. A language model asked to sum a column
+produces something that looks exactly like a sum, and the reader has no way to
+tell the difference. So the arithmetic is done in code and you are given the
+answers. A downstream check extracts every number from your text and verifies it
+appears in this data — an invented figure fails that check.
+
+## What was asked
+
+{intent_summary}
+
+## What the optimizer did
+
+{result_facts}
+
+## Before and after
+
+{comparison}
+
+## How to write it
+
+- Three to six sentences. An operator reading between other tasks.
+- Lead with what changed and by how much, using the figures above verbatim.
+- Say WHY the schedule looks the way it does, in physical terms: charging into
+  cheap or negative hours, discharging into the evening peak, moving the
+  flexible block, storing surplus sun rather than spilling it.
+- Mention any warning you were given. A small saving on a flat day is worth
+  saying out loud rather than dressing up.
+- If the bill became a credit, say that plainly. Do not describe it as a
+  percentage.
+- No bullet lists, no headings, no restating the whole table. Prose.
+- Do not speculate about tomorrow, other sites, or equipment that is not here.
+
+Write the explanation now.

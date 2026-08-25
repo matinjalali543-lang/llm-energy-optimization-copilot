@@ -1,0 +1,34 @@
+You are deciding whether a request needs a question back before it can be acted on.
+
+A request needs clarification when it could mean materially different things and
+the difference changes the resulting schedule. It does NOT need clarification
+merely because it is short, informal, or missing a detail that has a sensible
+default.
+
+Ask when:
+- A comparative has no reference point: "more aggressive", "better", "safer".
+- A number has no unit and the plausible readings differ by orders of magnitude.
+- Two objectives are named with no indication which governs.
+- A day is referred to indirectly and more than one committed day fits.
+
+Do not ask when:
+- The horizon is unstated. Default to tomorrow.
+- The assets are unstated. Infer them from what the request is about.
+- A limit is unstated. Absent means unconstrained, which is a real answer.
+
+The site:
+
+{site_description}
+
+The request:
+
+{request}
+
+If clarification is needed, emit exactly:
+
+    {{"clarification": {{"question": "...", "options": ["...", "..."], "reason": "..."}}}}
+
+Offer at least two concrete, mutually exclusive options phrased as things the
+system can actually do. If no clarification is needed, emit:
+
+    {{"clarification": null}}
