@@ -26,6 +26,37 @@ The consequence, stated plainly: **the safety of this system does not depend on
 the model behaving.** It depends on a strict schema and a validator that has
 never heard of the model.
 
+### Measured, not asserted
+
+Nineteen hostile payloads run through the full pipeline with the model wholly
+under the attacker's control. None reached the solver, and this is where they
+died:
+
+| Layer that refused | Count |
+|---|---:|
+| schema | 17 |
+| validator | 2 |
+| **parser / prompt** | **0** |
+
+Zero. Every attack was stopped by a layer that has never seen a prompt and
+cannot be talked round. That is the difference between a system that is safe and
+a system whose model was in a good mood.
+
+`CopilotResponse.stopped_at` is what makes this measurable rather than
+rhetorical: the answer to "what saved us" is a field in the result.
+
+### What is deliberately *not* blocked
+
+Two payloads in `INERT_PAYLOADS` pass through and complete, and that is correct.
+A `notes` field containing `__import__('os').system('rm -rf /')` is a note
+containing some characters: nothing in this system evaluates a string, looks up
+an attribute by one, or interpolates one into a query.
+
+Blocking them would mean claiming credit for defeating an attack that was never
+an attack, and would push the design towards filtering alarming-looking text
+instead of towards making text inert. The second property is the one that holds
+up when the attacker rephrases.
+
 ## B. Offline-first, so that "it works" is checkable (§4)
 
 The brief allows OpenAI, Anthropic or a local model. The environment this was
