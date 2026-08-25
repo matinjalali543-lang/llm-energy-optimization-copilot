@@ -1,0 +1,3 @@
+# Committed network CSVs must round-trip byte for byte so re-running the
+# extractor reproduces exactly what is in git.
+data/network/*.csv -text

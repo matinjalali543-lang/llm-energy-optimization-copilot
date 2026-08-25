@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-energy-optimization-copilot"
+version = "0.1.0"
+description = "Natural-language energy requests turned into validated structured intents and solved by a deterministic Pyomo optimizer, with the LLM confined to interpretation and explanation"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Ahmad" }]
+keywords = [
+    "llm", "optimization", "pyomo", "energy", "battery", "pydantic",
+    "structured-output", "prompt-injection", "decision-support",
+]
+
+dependencies = [
+    "pyomo>=6.7",
+    "pydantic>=2.6",
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+solvers = [
+    # HiGHS solves the dispatch LP. No conda, no commercial solver.
+    "highspy>=1.7",
+]
+llm = [
+    # Optional by design. Everything in this repository runs, and every test
+    # passes, with no provider installed and no API key set -- see
+    # docs/decisions.md section B.
+    "anthropic>=0.34",
+]
+viz = [
+    "matplotlib>=3.8",
+]
+ui = [
+    "streamlit>=1.35",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.urls]
+Repository = "https://github.com/Ahmadmohammadip/llm-energy-optimization-copilot"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

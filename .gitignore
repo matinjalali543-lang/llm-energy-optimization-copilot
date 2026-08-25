@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# The raw OPSD snapshot is 130 MB and reproducible via data/download_opsd.py.
+data/raw/
+
+# results/ and evaluations/recordings/ hold small reproducible evidence and
+# ARE tracked. A recording that is not committed is a measurement nobody can
+# check.
+
+# Never commit a key. The provider reads it from the environment only.
+.env
+*.key
