@@ -80,6 +80,25 @@ class FlexibleLoad:
     earliest_hour: int = 0
     latest_hour: int = 23
 
+    def default_schedule(self, hours: int = 24) -> list[float]:
+        """Where the block runs when nobody is optimizing it: as early as possible.
+
+        This matters more than it looks. A request that does *not* ask to shift
+        flexible load must still consume that energy — the load exists whether
+        or not permission was given to move it. An earlier version dropped the
+        block entirely in that case, which quietly deleted 0.4 MWh from the
+        site and made every before/after comparison flatter than the truth.
+        """
+        remaining = self.energy_mwh
+        schedule = [0.0] * hours
+        for hour in range(self.earliest_hour, min(self.latest_hour, hours - 1) + 1):
+            if remaining <= 0:
+                break
+            take = min(self.max_power_mw, remaining)
+            schedule[hour] = take
+            remaining -= take
+        return schedule
+
     def __post_init__(self) -> None:
         if self.energy_mwh <= 0 or self.max_power_mw <= 0:
             raise ValueError(f"{self.name}: energy_mwh and max_power_mw must be > 0")
@@ -104,7 +123,7 @@ class SiteConfig:
 
     name: str = "reference site"
     peak_load_mw: float = 0.50
-    pv_peak_mw: float = 0.30
+    pv_peak_mw: float = 0.60
     battery: Battery | None = field(default_factory=Battery)
     flexible_loads: tuple[FlexibleLoad, ...] = field(default_factory=lambda: (FlexibleLoad(),))
     grid_import_limit_mw: float = 0.60
@@ -225,7 +244,7 @@ def scale_to_site(profile: pd.DataFrame, site: SiteConfig) -> pd.DataFrame:
     """
     out = profile.copy()
     load_scale = site.peak_load_mw / 0.50
-    pv_scale = (site.pv_peak_mw / 0.30) if site.pv_peak_mw > 0 else 0.0
+    pv_scale = (site.pv_peak_mw / 0.60) if site.pv_peak_mw > 0 else 0.0
     out["load_mw"] = out["load_mw"] * load_scale
     out["pv_mw"] = out["pv_mw"] * pv_scale
     return out

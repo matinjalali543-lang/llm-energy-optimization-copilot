@@ -169,11 +169,15 @@ def test_vocabulary_is_generated_from_the_enums():
 
 
 def test_scaling_changes_pv_without_touching_price():
-    """Scenario comparison depends on this: a bigger array is not a cheaper day."""
+    """Scenario comparison depends on this: a bigger array is not a cheaper day.
+
+    The committed data is derived at 0.60 MWp, so doubling means 1.20.
+    """
     profile = day_profile(available_days()[0])
-    scaled = scale_to_site(profile, SiteConfig(pv_peak_mw=0.60))
+    scaled = scale_to_site(profile, SiteConfig(pv_peak_mw=1.20))
     assert scaled["pv_mw"].max() == pytest.approx(profile["pv_mw"].max() * 2, rel=1e-9)
     assert list(scaled["price_eur_mwh"]) == list(profile["price_eur_mwh"])
+    assert scaled["load_mw"].to_list() == pytest.approx(profile["load_mw"].to_list())
 
 
 def test_the_reference_site_needs_no_rescaling():

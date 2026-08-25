@@ -65,7 +65,14 @@ OUT_PATH = HERE / "processed" / "representative_days.csv"
 
 # --- the site. Shapes are real; these scales are a choice of this project. ---
 SITE_PEAK_LOAD_MW = 0.50      # a small commercial site
-SITE_PV_PEAK_MW = 0.30        # roof array, deliberately smaller than peak load
+# Deliberately LARGER than peak load. The first version used 0.30 MWp, which
+# never once exceeded demand across all 360 hours -- so every kWh of sun was
+# self-consumed no matter what the optimizer did, MAXIMIZE_SELF_CONSUMPTION was
+# a constant, and its "optimum" was an arbitrary vertex that happened to post
+# the worst cost of the four. An objective that cannot change its own metric is
+# decorative. At 0.60 MWp there are 24 surplus hours and 2.61 MWh to place, so
+# storing, exporting and curtailing become a real choice.
+SITE_PV_PEAK_MW = 0.60
 LOCAL_TZ = "Europe/Berlin"
 
 # --- the carbon proxy. NOT source data. See the module docstring. ---
