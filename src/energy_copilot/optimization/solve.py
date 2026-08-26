@@ -119,12 +119,12 @@ def solve_model(
             "load_mw": [meta["load"][t] for t in range(hours)],
             "pv_available_mw": [meta["pv_available"][t] for t in range(hours)],
             "carbon_g_kwh": [meta["carbon"][t] for t in range(hours)],
-            "grid_import_mw": [_clean(value(model.grid_import[t])) for t in range(hours)],
-            "grid_export_mw": [_clean(value(model.grid_export[t])) for t in range(hours)],
-            "pv_used_mw": [_clean(value(model.pv_used[t])) for t in range(hours)],
-            "charge_mw": [_clean(value(model.charge[t])) for t in range(hours)],
-            "discharge_mw": [_clean(value(model.discharge[t])) for t in range(hours)],
-            "soc_mwh": [_clean(value(model.soc[t])) for t in range(hours)],
+            "grid_import_mw": [_read(model.grid_import[t]) for t in range(hours)],
+            "grid_export_mw": [_read(model.grid_export[t]) for t in range(hours)],
+            "pv_used_mw": [_read(model.pv_used[t]) for t in range(hours)],
+            "charge_mw": [_read(model.charge[t]) for t in range(hours)],
+            "discharge_mw": [_read(model.discharge[t]) for t in range(hours)],
+            "soc_mwh": [_read(model.soc[t]) for t in range(hours)],
         }
     )
     fixed_flex = meta.get("fixed_flex", [0.0] * hours)
@@ -134,7 +134,7 @@ def solve_model(
     if flex_names:
         for index, name in enumerate(flex_names):
             schedule[f"flex_{name}_mw"] = [
-                _clean(value(model.flex[index, t])) for t in range(hours)
+                _read(model.flex[index, t]) for t in range(hours)
             ]
     schedule["flex_total_mw"] = (
         schedule[[f"flex_{name}_mw" for name in flex_names]].sum(axis=1)
@@ -164,6 +164,21 @@ def solve_model(
         termination=str(condition),
         meta=meta,
     )
+
+
+def _read(variable) -> float:
+    """Read a solved variable, tolerating one the presolve removed.
+
+    A site with no battery gets `charge`, `discharge` and `soc` bounded to
+    (0, 0). HiGHS presolves those away entirely, so asking Pyomo for a value
+    raises `No value for uninitialized VarData` — which crashed every
+    battery-less comparison arm while every battery-having one worked, so the
+    test suite never saw it.
+
+    A variable pinned to zero has a perfectly well-defined value. `exception=
+    False` returns None for the missing one and zero is the answer.
+    """
+    return _clean(value(variable, exception=False))
 
 
 def _clean(raw) -> float:

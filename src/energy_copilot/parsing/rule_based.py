@@ -393,5 +393,27 @@ def _comparison(text: str) -> list[dict]:
     return variants if len(variants) >= 2 else []
 
 
+def extract_constraints(text: str, site: SiteConfig | None = None) -> dict[str, object]:
+    """Pull only the limits out of a fragment, ignoring objective and horizon.
+
+    Exists for follow-up turns. "Keep at least 20% in the battery" is not a
+    request — it names no goal — but it does carry a fact, and a conversation
+    that discarded it would be re-asking for something it had just been told.
+    `Conversation` merges the result into the intent already established.
+    """
+    site = site or SiteConfig()
+    lowered = text.lower().strip()
+    constraints: dict[str, object] = {}
+    if _soc_constraints(lowered, constraints) is not None:
+        return {}
+    if _power_constraints(lowered, constraints, site) is not None:
+        return {}
+    if re.search(r"\b(no|without|don'?t|never)\s+export\b", lowered):
+        constraints["allow_export"] = False
+    if re.search(r"\b(no|without|don'?t|never)\s+curtail\w*\b", lowered):
+        constraints["allow_pv_curtailment"] = False
+    return constraints
+
+
 def known_days() -> list[str]:
     return available_days()
