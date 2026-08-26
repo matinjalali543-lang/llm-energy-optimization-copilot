@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        # No API key, no network at runtime, and the `llm` extra is deliberately
+        # NOT installed. The whole point of the offline-first design is that
+        # everything here passes without a model or a billing account.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[solvers,viz]" pytest ruff
+
+      - name: Lint
+        run: ruff check src tests data scripts evaluations app
+
+      - name: Confirm no credential is required
+        # A guard against the offline promise quietly eroding. If any import
+        # path starts needing a key, this fails before the tests do and says so.
+        run: |
+          python - <<'PY'
+          import os
+          for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+              assert not os.environ.get(name), f"{name} is set in CI; it must not be"
+          from energy_copilot.pipeline import run_request
+          response = run_request("Reduce electricity cost tomorrow.")
+          assert response.ok, response.summary()
+          print("full pipeline runs with no key:", response.summary())
+          PY
+
+      - name: Tests
+        run: pytest -v --durations=10
+
+      - name: Benchmark
+        # The headline numbers are re-measured on every push rather than being
+        # quoted from a README nobody re-ran.
+        run: |
+          python evaluations/run_eval.py
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "evaluations")
+          from run_eval import load_dataset, run_arm
+          from energy_copilot.domain.config import SiteConfig
+          from energy_copilot.parsing.rule_based import parse
+
+          report = run_arm("rule_based", parse, load_dataset(), SiteConfig())
+          summary = report.summary()
+          print(summary)
+          assert summary["safety"] == 1.0, "a hostile prompt reached the solver"
+          assert summary["kind_accuracy"] >= 0.88, summary
+          PY
