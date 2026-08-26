@@ -125,6 +125,14 @@ NUMBER = r"(\d+(?:\.\d+)?)"
 POWER_UNIT = r"(kw|mw|kilowatts?|megawatts?)"
 ENERGY_UNIT = r"(kwh|mwh|kilowatt[- ]hours?|megawatt[- ]hours?)"
 
+# A gap that may not cross a clause boundary or another constraint's noun.
+# "Lower the peak and hold export under 100 kW" let the peak pattern reach
+# across "and hold export" and claim the export figure, capping total import at
+# 100 kW on a site whose load alone exceeds that. The request was well formed
+# and the resulting model was infeasible, which is the least debuggable pair of
+# properties a parse can have.
+GAP = r"(?:(?!\b(?:and|export|import|peak|battery|soc)\b)[^,;.])"
+
 
 @dataclass(frozen=True)
 class ParseTrace:
@@ -169,6 +177,15 @@ def parse(request: str, site: SiteConfig | None = None) -> ParseOutcome:
     if ambiguity is not None:
         return ambiguity
 
+    # Impossible values are refused BEFORE asking which objective governs.
+    # "Set the state of charge to 150%" used to be answered with "which
+    # objective should govern?" — a question whose answer cannot rescue the
+    # request, and which makes the system look like it did not read it. A
+    # fraction outside [0, 1] is meaningless whatever the goal is.
+    impossible = _impossible_percentage(text)
+    if impossible is not None:
+        return impossible
+
     objective = _objective(text)
     comparison = _comparison(text)
     if objective is None and comparison:
@@ -197,10 +214,24 @@ def parse(request: str, site: SiteConfig | None = None) -> ParseOutcome:
     if unit_problem is not None:
         return unit_problem
 
-    if re.search(r"\b(no|without|don'?t|never)\s+export\b", text):
+    if re.search(r"\b(no|without|don'?t|do not|not|never)\s+export\w*\b", text):
         constraints["allow_export"] = False
-    if re.search(r"\b(no|without|don'?t|never)\s+curtail\w*\b", text):
+    if re.search(r"\b(no|without|don'?t|do not|not|never)\s+curtail\w*\b", text):
         constraints["allow_pv_curtailment"] = False
+
+    # Comparison variants consume quantities too — "compare a 1 MWh battery
+    # with a 2 MWh battery" states two numbers and uses both. Checking only
+    # `constraints` made the guard reject every comparison request it was meant
+    # to protect.
+    consumed = dict(constraints)
+    for index, variant in enumerate(comparison):
+        for key, value in variant.items():
+            if isinstance(value, int | float):
+                consumed[f"variant_{index}_{key}"] = value
+
+    leftover = _unconsumed_quantity(text, consumed)
+    if leftover is not None:
+        return leftover
 
     try:
         return OptimizationIntent(
@@ -219,6 +250,108 @@ def parse(request: str, site: SiteConfig | None = None) -> ParseOutcome:
             reason=str(exc).split("\n")[0][:400],
             offending_value=request[:200],
         )
+
+
+# Numbers that are part of a date, not a quantity.
+ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+QUANTITY = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(%|kwh|mwh|kw|mw|hours?|hrs?)\b", re.IGNORECASE
+)
+
+
+SOC_CONTEXT = re.compile(r"\b(charge|charged|soc|state of charge|battery)\b")
+
+
+def _impossible_percentage(text: str) -> Rejection | None:
+    """A state of charge outside 0-100% is meaningless whatever the goal is."""
+    if not SOC_CONTEXT.search(text):
+        return None
+    for match in re.finditer(PERCENT, text):
+        value = float(match.group(1))
+        if value > 100.0:
+            return Rejection(
+                code="impossible_value",
+                reason=(
+                    f"{value:g}% is not a state of charge a battery can reach: a "
+                    "fraction of full charge cannot exceed 100%. This is refused "
+                    "regardless of what the request is trying to achieve."
+                ),
+                offending_value=match.group(0),
+            )
+    return None
+
+
+def _unconsumed_quantity(text: str, constraints: dict) -> Rejection | None:
+    """Refuse when the request states a quantity the parser did not use.
+
+    This is the difference between failing and failing *quietly*. Before this
+    guard, "cap import at 200 MW" produced a confident, well-formed, entirely
+    valid intent with no import cap in it — so the operator was told their
+    request had been carried out, and the number they gave had simply
+    evaporated. Seven of the eight failing evaluation prompts were that shape.
+
+    A parser that cannot use a number the user supplied has not understood the
+    request, and saying so is strictly better than proceeding as though the
+    number were never there.
+    """
+    without_dates = ISO_DATE.sub(" ", text)
+    used = [float(v) for v in constraints.values() if isinstance(v, int | float)]
+
+    # A limit written as a word is still a limit. "grid import capped at zero"
+    # carries no digits, so the numeric scan below never saw it and the cap was
+    # dropped exactly as silently as "cap import at 200 MW" once was.
+    worded = re.search(
+        r"\b(?:import|draw|export|peak)\w*\b[^,;.]{0,30}?"
+        r"(?:capped at|cap\w* at|at|to|under|below)\s+(zero|none|nothing)\b",
+        without_dates,
+    )
+    if worded and not any(abs(value) <= 1e-12 for value in used):
+        return Rejection(
+            code="unused_quantity",
+            reason=(
+                f"'{worded.group(0).strip()}' states a limit of zero, which this "
+                "parser did not convert into a constraint. Proceeding would mean "
+                "ignoring it; write it as '0 MW' to be sure it is applied."
+            ),
+            offending_value=worded.group(0).strip()[:60],
+        )
+
+    for match in QUANTITY.finditer(without_dates):
+        raw, unit = float(match.group(1)), match.group(2).lower()
+        if unit == "%":
+            candidates = [raw / 100.0, raw]
+        elif unit in ("kw", "kwh"):
+            candidates = [raw / 1000.0, raw]
+        elif unit.startswith("h"):
+            # An hour count is a horizon, and 24 is the only one supported.
+            if abs(raw - 24) < 1e-9:
+                continue
+            return Rejection(
+                code="unsupported_horizon",
+                reason=(
+                    f"this system optimises one day at a time, so a horizon of "
+                    f"{raw:g} hours cannot be honoured. Ask for a single day."
+                ),
+                offending_value=match.group(0),
+            )
+        else:
+            candidates = [raw]
+
+        if not any(
+            any(abs(candidate - value) <= 1e-9 for value in used)
+            for candidate in candidates
+        ):
+            return Rejection(
+                code="unused_quantity",
+                reason=(
+                    f"'{match.group(0)}' was not understood as a limit this "
+                    "system can apply, and proceeding would mean silently "
+                    "ignoring a number you gave. Try phrasing it as 'keep grid "
+                    "import under 400 kW' or 'keep the battery above 20%'."
+                ),
+                offending_value=match.group(0),
+            )
+    return None
 
 
 def _absent_asset(text: str) -> str | None:
@@ -288,6 +421,31 @@ def _shifting(text: str) -> bool:
 
 def _soc_constraints(text: str, constraints: dict) -> Rejection | None:
     """Floor, ceiling and closing charge, as fractions."""
+    # "between 20% and 80%" sets both ends at once, and has to be read before
+    # either single-ended pattern gets hold of one of the numbers.
+    window = re.search(rf"between\s*{PERCENT}\s*and\s*{PERCENT}", text)
+    if window:
+        low, high = float(window.group(1)) / 100.0, float(window.group(2)) / 100.0
+        constraints["minimum_soc_frac"] = min(low, high)
+        constraints["maximum_soc_frac"] = max(low, high)
+        return None
+
+    # A NEGATED "below" is a floor, not a ceiling. "never let the battery go
+    # below 99%" was read as a maximum of 99% -- the exact opposite of the
+    # request, expressed as a perfectly valid intent that then solved. Checked
+    # first, because the plain ceiling pattern would otherwise claim the number.
+    negated_floor = re.search(
+        # Up to five intervening words: "never LET THE BATTERY GO below 99%" is
+        # four, and a limit of three silently fell through to the ceiling
+        # pattern and inverted the constraint.
+        rf"(?:never|not|don'?t|do not|no lower than|avoid)\s+(?:\w+\s+){{0,5}}"
+        rf"(?:below|under)\D{{0,10}}{PERCENT}",
+        text,
+    )
+    if negated_floor:
+        constraints["minimum_soc_frac"] = float(negated_floor.group(1)) / 100.0
+        return None
+
     floor = re.search(
         rf"(?:above|over|at least|no lower than|not below|minimum(?: of)?"
         rf"|keep\w*(?: soc)?(?: above)?)\D{{0,20}}{PERCENT}",
@@ -319,8 +477,9 @@ def _power_constraints(text: str, constraints: dict, site: SiteConfig) -> Reject
     parser, and the difference is three orders of magnitude.
     """
     limit = re.search(
-        rf"\b(?:import|draw|take|pull)\w*\b.{{0,30}}?"
-        rf"(?:under|below|less than|at most|no more than|to)\s*{NUMBER}\s*{POWER_UNIT}?",
+        rf"\b(?:import|draw|take|pull)\w*\b{GAP}{{0,30}}?"
+        rf"(?:under|below|less than|at most|no more than|more than|capped at"
+        rf"|cap\w* at|at|to)\s*{NUMBER}\s*{POWER_UNIT}?",
         text,
     )
     if limit:
@@ -343,8 +502,9 @@ def _power_constraints(text: str, constraints: dict, site: SiteConfig) -> Reject
             return Rejection(code="bad_unit", reason=str(exc), offending_value=unit)
 
     export_cap = re.search(
-        rf"\bexport\w*\b.{{0,30}}?"
-        rf"(?:under|below|less than|at most|no more than|to)\s*{NUMBER}\s*{POWER_UNIT}",
+        rf"\bexport\w*\b{GAP}{{0,30}}?"
+        rf"(?:under|below|less than|at most|no more than|more than|capped at"
+        rf"|cap\w* at|at|to)\s*{NUMBER}\s*{POWER_UNIT}",
         text,
     )
     if export_cap:
@@ -355,8 +515,22 @@ def _power_constraints(text: str, constraints: dict, site: SiteConfig) -> Reject
         except UnitError as exc:
             return Rejection(code="bad_unit", reason=str(exc))
 
+    energy = re.search(
+        rf"\b(?:deliver|supply|provide|need|require)\w*\b\D{{0,20}}{NUMBER}\s*{ENERGY_UNIT}",
+        text,
+    )
+    if energy:
+        try:
+            constraints["required_energy_mwh"] = convert(
+                float(energy.group(1)),
+                "kWh" if energy.group(2).startswith("k") else "MWh",
+                "MWh",
+            )
+        except UnitError as exc:
+            return Rejection(code="bad_unit", reason=str(exc))
+
     peak_cap = re.search(
-        rf"\bpeak\b.{{0,30}}?(?:under|below|at most|no more than|to)"
+        rf"\bpeak\b{GAP}{{0,30}}?(?:under|below|at most|no more than|to)"
         rf"\s*{NUMBER}\s*{POWER_UNIT}",
         text,
     )
@@ -408,9 +582,9 @@ def extract_constraints(text: str, site: SiteConfig | None = None) -> dict[str, 
         return {}
     if _power_constraints(lowered, constraints, site) is not None:
         return {}
-    if re.search(r"\b(no|without|don'?t|never)\s+export\b", lowered):
+    if re.search(r"\b(no|without|don'?t|do not|not|never)\s+export\w*\b", lowered):
         constraints["allow_export"] = False
-    if re.search(r"\b(no|without|don'?t|never)\s+curtail\w*\b", lowered):
+    if re.search(r"\b(no|without|don'?t|do not|not|never)\s+curtail\w*\b", lowered):
         constraints["allow_pv_curtailment"] = False
     return constraints
 

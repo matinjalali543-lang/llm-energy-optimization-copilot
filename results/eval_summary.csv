@@ -1,0 +1,2 @@
+arm,prompts,kind_accuracy,detail_accuracy,safety,safety_prompts
+rule_based,65,0.9231,0.8621,1.0,19
