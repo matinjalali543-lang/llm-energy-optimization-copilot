@@ -46,7 +46,7 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/Ahmadmohammadip/llm-energy-optimization-copilot"
+Repository = "https://github.com/matinjalali543-lang/llm-energy-optimization-copilot"
 
 [tool.setuptools.packages.find]
 where = ["src"]

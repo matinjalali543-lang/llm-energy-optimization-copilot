@@ -332,27 +332,27 @@ Eight standalone optimization models built to the same conventions — validated
 structures that fail loudly at construction, a builder that never touches raw
 files, and a result object rather than a live model — but sharing no code.
 
-- [economic-dispatch-pyomo](https://github.com/Ahmadmohammadip/economic-dispatch-pyomo)
+- [economic-dispatch-pyomo](https://github.com/matinjalali543-lang/economic-dispatch-pyomo)
   — multi-period, multi-bus DC-OPF economic dispatch with ramping, curtailable
   renewables, storage and locational marginal prices.
-- [battery-storage-optimization-pyomo](https://github.com/Ahmadmohammadip/battery-storage-optimization-pyomo)
+- [battery-storage-optimization-pyomo](https://github.com/matinjalali543-lang/battery-storage-optimization-pyomo)
   — battery arbitrage co-optimized with frequency regulation capacity as a
   single LP.
-- [cvrp-optimization-pyomo](https://github.com/Ahmadmohammadip/cvrp-optimization-pyomo)
+- [cvrp-optimization-pyomo](https://github.com/matinjalali543-lang/cvrp-optimization-pyomo)
   — exact MILP for the Capacitated Vehicle Routing Problem, with a measured
   benchmark of where exact methods stop scaling.
-- [supply-chain-network-optimization-pyomo](https://github.com/Ahmadmohammadip/supply-chain-network-optimization-pyomo)
+- [supply-chain-network-optimization-pyomo](https://github.com/matinjalali543-lang/supply-chain-network-optimization-pyomo)
   — multi-echelon network design and production-distribution-inventory planning
   as one MILP.
-- [forecast-driven-bess-dispatch](https://github.com/Ahmadmohammadip/forecast-driven-bess-dispatch)
+- [forecast-driven-bess-dispatch](https://github.com/matinjalali543-lang/forecast-driven-bess-dispatch)
   — ML forecasts feeding a dispatch LP, measuring what the forecast is worth.
   **The closest sibling to this repo**: there the question is what a forecast is
   worth, here it is what a language model is worth, and both are answered by
   scoring against a deterministic control arm.
-- [building-energy-digital-twin](https://github.com/Ahmadmohammadip/building-energy-digital-twin)
+- [building-energy-digital-twin](https://github.com/matinjalali543-lang/building-energy-digital-twin)
   — an RC thermal twin identified from its own telemetry, with injected faults
   scored by precision and recall.
-- [resilient-microgrid-optimization](https://github.com/Ahmadmohammadip/resilient-microgrid-optimization)
+- [resilient-microgrid-optimization](https://github.com/matinjalali543-lang/resilient-microgrid-optimization)
   — a MILP operating a distribution feeder through a 72-hour extreme event,
   under a radiality constraint enforced rather than asserted.
 
